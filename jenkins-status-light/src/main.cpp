@@ -8,15 +8,17 @@
 */
 
 #include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 
 const char* ssid     = "";
 const char* password = "";
 
 //const char* host = "ci.apache.org";
 //const char* url = "/json/builders/activemq-site-production";
-const char* host = "jenkins.mono-project.com";
+String host = "jenkins.mono-project.com";
+String jobname = "test-mono-mainline-codecoverage";
 // const char* url = "/job/test-linker-mainline/lastBuild/api/json";
-const char* url = "/job/test-mono-mainline-codecoverage/lastBuild/api/json";
+//String url = "/job/test-mono-mainline-codecoverage/lastBuild/api/json";
 
 // Jenkins status constants
 const String STATUS_TEXT_SUCCESS = "SUCCESS";
@@ -25,6 +27,8 @@ const String STATUS_TEXT_FAILED = "FAILURE";
 const byte STATUS_SUCCESS = 1;
 const byte STATUS_UNSTABLE = 2;
 const byte STATUS_FAILED = 3;
+
+ESP8266WebServer server(80);   //Web server object. Will be listening in port 80 (default for HTTP)
 
 // extract the status of the job and return one of the status constants
 byte extractStatus(String json) {
@@ -61,6 +65,24 @@ byte extractStatus(String json) {
   }
 }
 
+// HTTP webserver handler
+void handleConfigure() {
+  String message="Number of args received:";
+  message += server.args();
+  message += "\n";
+  for (int i = 0; i < server.args(); i++) {
+    message += server.argName(i) + ":" ;     //Get the name of the parameter
+    message += server.arg(i) + "\n";              //Get the value of the parameter
+
+    if (server.argName(i).equals("host")) {
+      host = server.arg(i);
+    } else if (server.argName(i).equals("jobname")) {
+      jobname = server.arg(i);
+    }
+  }
+  server.send(200, "text/plain", message);       //Response to the HTTP request
+}
+
 void setup() {
   Serial.begin(115200);
   delay(10);
@@ -87,12 +109,18 @@ void setup() {
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP());
+
+  server.on("/configure", handleConfigure); //Associate the handler function to the path
+  server.begin();
+  Serial.println("Server listening");
 }
 
 int value = 0;
 
 void loop() {
-  delay(5000);
+  server.handleClient();    //Handling of incoming requests
+
+  delay(2000);
   ++value;
 
   Serial.print("connecting to ");
@@ -108,6 +136,7 @@ void loop() {
 
 
   Serial.print("Requesting URL: ");
+  String url = "/job/" + jobname + "/lastBuild/api/json";
   Serial.println(url);
 
   // This will send the request to the server
